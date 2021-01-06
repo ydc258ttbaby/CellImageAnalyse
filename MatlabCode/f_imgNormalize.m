@@ -5,7 +5,7 @@ function res = f_imgNormalize(src)
 %
     norMax = 255;
     norMin = 0;
-    imgMax = max(max(src)); 
-    imgMin = min(min(src)); 
+    imgMax = max(max(src));
+    imgMin = min(min(src));
     res = uint8(round((norMax-norMin)*(src-imgMin)/(imgMax-imgMin) + norMin));
 end
