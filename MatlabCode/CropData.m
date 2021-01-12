@@ -1,6 +1,6 @@
 function cropData = CropData(data,window_size,filter_size,alpha)
     lengthOfData = length(data);
-    isDisplay = 0;
+    isDisplay = 1;
     if isDisplay
         figure
         plot_1D_Single(data,'data')
@@ -8,8 +8,9 @@ function cropData = CropData(data,window_size,filter_size,alpha)
 %     window_size = 400;
 %     filter_size = 100;
 %     alpha = 0.4;
-    [row,col] =size(data);
-    subinterval_num = floor(row/window_size);
+%     [row,col] =size(data);
+    
+    subinterval_num = floor(lengthOfData/window_size);
     subinterval_max_list =zeros(subinterval_num,1);
     maxValue = 0;
     smoothData = zeros(subinterval_num,1);
@@ -86,14 +87,17 @@ function cropData = CropData(data,window_size,filter_size,alpha)
                 cropIndex = cropIndex - (cropIndex(end)-lengthOfData);
             end
             cropData = data(cropIndex);
+            
         else
 %             cropRange = 2^(length(dec2bin(lengthOfData/2))-1);
 %             cropIndex = (floor(cropRange+10000/2) - cropRange + 1):(floor(cropRange+10000/2) +cropRange);
 %             cropData = data(cropIndex);
             cropData = data;
+            disp('whole')
         end
     else
         disp('not found single');
         cropData = [];
     end
+    
 end

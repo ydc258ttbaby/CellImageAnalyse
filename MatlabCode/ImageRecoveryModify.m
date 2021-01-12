@@ -11,7 +11,7 @@ function [Image, RepRate] = ImageRecoveryModify(RawData, SampleRate, PulPol,widt
 	RawData = RawData - mean(RawData);
 	RawData_f = fft(RawData);
 %     RepRate = find(RawData_f == max(RawData_f(100 : round(end / 2))), 1, 'first');
-    RepRate = find(RawData_f == max(RawData_f(100 : 4500)), 1, 'first')
+    RepRate = find(RawData_f == max(RawData_f(100 : 4500)), 1, 'first');
 
 
 	% Calculate the width of each pulse and make sure the number is even
