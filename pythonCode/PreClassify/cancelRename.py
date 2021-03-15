@@ -11,7 +11,8 @@ def cancelRename(imgfile):
             os.rename(file_dir+'\\'+fileName,file_dir+'\\'+newName)
             
 
-fileList = ['210668']
+fileList = ['210058']
 for file in fileList:
-    imgfile = "F:\\北京\\图像数据\\北京第六次图像数据\\%s\\未分类" %file
+    imgfile = "F:\\武汉\\图像数据\\武汉第六次图像数据\\%s\\未分类" %file
     cancelRename(imgfile)
+    print("completed ")

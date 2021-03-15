@@ -5,59 +5,53 @@ import pandas as pd
 from skimage import io
 from skimage import transform as skiTransform
 import numpy as np
-import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
-
-import torch
 import torchvision
 import torchvision.transforms as transforms
 import time
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import random
-# Ignore warnings
 import warnings
-import csv
 warnings.filterwarnings("ignore")
-plt.ion()   # interactive mode
-
+from matplotlib import pyplot as plt
 from YDC_DL_utility import Rescale,RandomCrop,ToTensor,grayToRGB,show_image,CellsLabelDataset,VGGNet,Conv3x3BNReLU
 
-dir_list = ["F:\\天津\\图像数据\\天津第六次图像数据\\剪裁后\\210694\\空图",\
-            "F:\\北京\\图像数据\\北京第六次图像数据\\210668\\大细胞",\
-            "F:\\北京\\图像数据\\北京第六次图像数据\\210668\\空图",\
-            "F:\\北京\\图像数据\\北京第六次图像数据\\210668\\淋巴",\
-            "F:\\北京\\图像数据\\北京第六次图像数据\\210668\\其他",\
-            "F:\\北京\\图像数据\\北京第六次图像数据\\210668\\杂质"]
+import config
 
-csvName = 'lskj'
-CSVPathName = "F:\\DeepLearningRes\\TwoPreClassify"
+dir_list = config.DatasetImgDirList
+CSVPathName = config.taskRootDir
+pthName = config.pthName
+TrainLabelCSVFileName = config.TrainLabelCSVFileName
+VerifyLabelCSVFileName = config.VerifyLabelCSVFileName
 
+PATH = '%s\\%s' % (CSVPathName,pthName)
+print(PATH)
+classify_num = 2
+train_csv_file = "%s\\%s" % (CSVPathName,TrainLabelCSVFileName)
+test_csv_file = "%s\\%s" % (CSVPathName,VerifyLabelCSVFileName)
 
-transformed_dataset_train = CellsLabelDataset(csv_file="%s\\lskj_train.csv" % CSVPathName,
-                                            root_dir_list=dir_list,
-                                            transform=transforms.Compose([
-                                                grayToRGB(),
-                                                Rescale(250),
-                                               RandomCrop(224),
-                                               ToTensor()
+transformed_dataset_train = CellsLabelDataset(csv_file=train_csv_file,\
+                                              root_dir_list=dir_list,\
+                                              transform=transforms.Compose([\
+                                                grayToRGB(),\
+                                                Rescale(250),\
+                                                RandomCrop(224),\
+                                                ToTensor()\
                                             ]))
-transformed_dataset_test = CellsLabelDataset(csv_file="%s\\lskj_verify.csv" % CSVPathName,
-                                            root_dir_list=dir_list,
-                                            transform=transforms.Compose([
-                                                grayToRGB(),
-                                                Rescale(250),
-                                               RandomCrop(224),
-                                               ToTensor()
+transformed_dataset_test = CellsLabelDataset(csv_file=test_csv_file,\
+                                             root_dir_list=dir_list,\
+                                             transform=transforms.Compose([\
+                                               grayToRGB(),\
+                                               Rescale(250),\
+                                               RandomCrop(224),\
+                                               ToTensor()\
                                             ]))
 
 
-trainloader = DataLoader(transformed_dataset_train, batch_size=4,
-                        shuffle=True, num_workers=2)
-testloader = DataLoader(transformed_dataset_test, batch_size=1,
-                        shuffle=False, num_workers=2)
+trainloader = DataLoader(transformed_dataset_train, batch_size=4, shuffle=True, num_workers=1)
+testloader = DataLoader(transformed_dataset_test, batch_size=1, shuffle=False, num_workers=1)
 
 if __name__ == '__main__':
     
@@ -75,33 +69,35 @@ if __name__ == '__main__':
     
     def VGG16():
         block_nums = [2, 2, 3, 3, 3]
-        model = VGGNet(block_nums,2)
+        model = VGGNet(block_nums,classify_num)
         return model
 
     net = VGG16()
+
     bLoad = 1
+    
     if bLoad == 1:
-        PATH = '%s\\two_pre_classify_0305.pth' % CSVPathName
+        
         if os.path.exists(PATH):
             net.load_state_dict(torch.load(PATH))
+            print("load last pth")
     if(torch.cuda.is_available):
         net.to(device)
     
     #------------------------------------------------------------------
     # Define a Loss function and optimizer
     #------------------------------------------------------------------
-   
-
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.0005, momentum=0.9) # four classify up to 73% and 91%
-    # optimizer = optim.SGD(net.parameters(), lr=0.0003, momentum=0.9)
+    optimizer = optim.SGD(net.parameters(), lr=0.0001, momentum=0.9)
+    # optimizer = optim.SGD(net.parameters(), lr=0.0003, momentum=0.9) # four classify up to 73% and 91%
 
     #------------------------------------------------------------------
     # Train the network
     #------------------------------------------------------------------
     print('Start Training')
     startTime = time.time()
-    for epoch in range(10):  # loop over the dataset multiple times
+    lossList = []
+    for epoch in range(5):  # loop over the dataset multiple times
 
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
@@ -123,25 +119,22 @@ if __name__ == '__main__':
 
             # print statistics
             running_loss += loss.item()
-            if i % 5 == 4:    # print every 2000 mini-batches
-                print('[%d, %5d] loss: %.3f' %
-                    (epoch + 1, i + 1, running_loss / 5))
+            
+            if i % 50 == 49:    # print every 2000 mini-batches
+                print('[%d, %5d] loss: %.6f' %
+                    (epoch + 1, i + 1, running_loss / 50))
+                lossList.append(running_loss)
                 running_loss = 0.0
     print('time: %.3f' % (time.time()-startTime))
-    # print('Finished Training')
+    print('Finished Training')
 
     #------------------------------------------------------------------
     # quickly save our trained model
     #------------------------------------------------------------------
-    PATH = '%s\\five_pre_classify_0305.pth' % CSVPathName
+    
     torch.save(net.state_dict(), PATH)
+    print('pth saved')
 
-    #------------------------------------------------------------------
-    # Test the network on the test data
-    #------------------------------------------------------------------
-    dataiter = iter(testloader)
-    images= dataiter.next()['image']
-    labels =  dataiter.next()['label']
     #------------------------------------------------------------------
     # load the model
     #------------------------------------------------------------------
@@ -149,10 +142,14 @@ if __name__ == '__main__':
     net.load_state_dict(torch.load(PATH))
     if(torch.cuda.is_available):
         net.to(device)
+    #------------------------------------------------------------------
+    # Test the network on the test data
+    #------------------------------------------------------------------
+    dataiter = iter(testloader)
+    images= dataiter.next()['image']
+    labels =  dataiter.next()['label']
+    
 
-    #------------------------------------------------------------------
-    # the network performs on the whole dataset
-    #------------------------------------------------------------------
     correct = 0
     total = 0
     count_cancer = 0
@@ -172,6 +169,8 @@ if __name__ == '__main__':
                 count_canceriswrong += 1
             
             total += labels.size(0)
+            if total % 10 == 0 :
+                print(total)
             correct += (predicted == labels).sum().item()
 
     # print('wrongiscacer: %d canceriswrong: %d total: %d' % (count_wrongiscancer,count_canceriswrong,total))
@@ -179,3 +178,7 @@ if __name__ == '__main__':
         100 * correct / total))
     # print('Cancer Accuracy : %d %%' % (
     # 100 * (1-(count_wrongiscancer+count_canceriswrong) / total)))
+
+    x = np.arange(1,len(lossList)+1)
+    plt.plot(x,lossList)
+    plt.show()

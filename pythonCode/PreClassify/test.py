@@ -1,8 +1,6 @@
-from skimage import io
 import os
-import numpy as np
-
-file_dir = "F:\\PythonCode"
+file_dir = r"F:\DeepLearningRes\BigCell"
 for root, dirs, files in os.walk(file_dir):
     for fileName in files:
-        print(fileName)
+        print(os.path.join(file_dir,fileName))
+

@@ -105,7 +105,7 @@ def image_recovery(data,widPar,passBandPar,display,coord = [0.5,0.5,1.0,1.0],off
     Image = Image - np.tile(backGround.reshape(-1,1),(1,col))
     return Image
 # @profile
-def ImageTransRecoverySave(file_path,netPATH,imgName='C:\\Users\\86133\\data\\testImage\\test',dataNum=1,widPar=0.5,passBandPar=1.0,display=False,displayImage=False,useNet = False):
+def ImageTransRecoverySave(file_path,imgName='C:\\Users\\86133\\data\\testImage\\test',dataNum=1,widPar=0.5,passBandPar=1.0,display=False,displayImage=False,useNet = False):
     print(file_path)
     t1 = time.time()
     rawData = MF.bin_data_read(file_path)
@@ -114,13 +114,7 @@ def ImageTransRecoverySave(file_path,netPATH,imgName='C:\\Users\\86133\\data\\te
     L = len(rawData)
     for i in np.arange(dataNum):
         data = rawData[round(i/dataNum*L):round((i+1)/dataNum*L)]
-        if useNet:
-            data = np.array([[data]])
-            coord = MF.bin_data_to_coord(netPATH,data)
-            print(coord)
-            ImageMatrix = MF.image_recovery(data[0,0,:],widPar,passBandPar,display,coord=[coord[0,0],0.5,coord[0,1],1.0])
-        else:
-            ImageMatrix = MF.image_recovery(data,widPar,passBandPar,display,coord = [0.5,0.5,0.5,1.0])
+        ImageMatrix = MF.image_recovery(data,widPar,passBandPar,display,coord = [0.5,0.5,0.5,1.0])
         print('recovery completed %d' % i)
         # print(time.time()-t1)
         # print(np.shape(ImageMatrix))

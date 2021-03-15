@@ -5,13 +5,14 @@ from myClass import RTO,Serialport
 import myFunction as MF
 
 
-count = 0
-acNum = 5
-acCount = 1
-widPar = 0.5
+
+acNum = 5 # 每个bin文件包含的图像个数
+count = 0 
+acCount = 1 # 每次采集的bin文件个数
+widPar = 0.5 
 passBandPar = 1.0
 display = False
-
+bRealtimeRecovery = False
 ser = Serialport('com7',115200)
 print(ser)
 ser.open()
@@ -24,15 +25,17 @@ while(count < acCount):
     rto.open()
     rto.AcAndSave()
     ser.stop()
-    time.sleep(1)
-    file_path = 'Z:\\RTx\\RefWaveforms\\wave_%s_%d.Wfm.bin' % (timeStr,acNum)
-    MF.ImageTransRecoverySave(file_path,\
-                                dataNum=acNum,\
-                                # displayImage=True,\
-                                # display=True,\
-                                # widPar=1.0,\
-                                # passBandPar=0.5\
-                                )
+    if ~bRealtimeRecovery:
+        time.sleep(1)
+    else:
+        file_path = 'Z:\\RTx\\RefWaveforms\\wave_%s_%d.Wfm.bin' % (timeStr,acNum)
+        MF.ImageTransRecoverySave(file_path,\
+                                    dataNum=acNum,\
+                                    # displayImage=True,\
+                                    # display=True,\
+                                    # widPar=1.0,\
+                                    # passBandPar=0.5\
+                                    )
 
     rto.close()
     ser.run()

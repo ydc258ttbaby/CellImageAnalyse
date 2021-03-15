@@ -136,13 +136,14 @@ class CellsLabelDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        for root_dir in self.root_dir_list:
-            img_name = os.path.join(root_dir,self.label_frame.iloc[idx, 0])
-            if(os.path.exists(img_name)):
-                break
-            else:
-                continue
-
+        # for root_dir in self.root_dir_list:
+            # img_name = os.path.join(root_dir,self.label_frame.iloc[idx, 0])
+            # if(os.path.exists(img_name)):
+            #     break
+            # else:
+            #     continue
+        img_name = self.label_frame.iloc[idx, 0]
+        # print(img_name)
         image = io.imread(img_name)
         # print(np.shape(image))
         # image = np.array([image])
