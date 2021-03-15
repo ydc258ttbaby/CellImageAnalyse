@@ -20,7 +20,7 @@ ser.run()
 
 while(count < acCount):
     timeStr = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    binFileName = 'C:\\Users\\Public\\Documents\\Rohde-Schwarz\\RTx\\RefWaveforms\\wave_%s_%d.bin' % (timeStr,acNum)
+    binFileName = 'Y:\\temp\\wave_%s_%d.bin' % (timeStr,acNum)
     rto = RTO('192.168.1.1',acNum,binFileName)
     rto.open()
     rto.AcAndSave()
@@ -29,7 +29,7 @@ while(count < acCount):
         time.sleep(1)
     else:
         file_path = 'Z:\\RTx\\RefWaveforms\\wave_%s_%d.Wfm.bin' % (timeStr,acNum)
-        MF.ImageTransRecoverySave(file_path,\
+        MF.BinDataToCropImage(file_path,\
                                     dataNum=acNum,\
                                     # displayImage=True,\
                                     # display=True,\

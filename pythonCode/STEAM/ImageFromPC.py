@@ -17,7 +17,7 @@ for file_path in bin_list:
     # file_path = "D:\\天津\\原始数据\\580\\split\\580_%d.Wfm.bin" %(i+1)
     # file_path = "D:\\天津\\原始数据\\580\\wave20201023_T142146_200_1.Wfm.bin"
     dataNum = 50
-    MF.ImageTransRecoverySave(file_path,\
+    MF.BinDataToCropImage(file_path,\
                                 dataNum=dataNum,\
                                 # displayImage=True,\
                                 # display=True,\

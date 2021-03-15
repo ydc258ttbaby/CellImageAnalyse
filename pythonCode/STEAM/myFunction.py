@@ -4,7 +4,6 @@ import os
 import struct
 from scipy.fftpack import fft,ifft
 import myFunction as MF
-from PIL import Image
 import time
 import torch
 import torch.nn as nn
@@ -34,15 +33,15 @@ def data_read(file_path):
     data = np.array(data_list[10:])
     return data
 # @profile
-def image_recovery(data,widPar,passBandPar,display,coord = [0.5,0.5,1.0,1.0],offset = [0.0,0.0]):
+def image_recovery(data,widPar,passBandPar,display,bPreCrop = False,coord = [0.5,0.5,1.0,1.0],offset = [0.0,0.0]):
     if display:
         MF.plot_1D_single(data[:3000])
-    
-    RawL = len(data)
-    HalfIndexRange = pow(2,len(bin(round((coord[2]+2*offset[0])*RawL-1)))-3)
-    data = data[round(coord[0]*RawL)-HalfIndexRange:round(coord[0]*RawL)+HalfIndexRange]
+    if bPreCrop:
+        RawL = len(data)
+        HalfIndexRange = pow(2,len(bin(round((coord[2]+2*offset[0])*RawL-1)))-3)
+        data = data[round(coord[0]*RawL)-HalfIndexRange:round(coord[0]*RawL)+HalfIndexRange]
     L = len(data)
-    print(L)
+    # print(L)
     data = data - np.mean(data)
     data_f = (fft(data))
 
@@ -91,48 +90,64 @@ def image_recovery(data,widPar,passBandPar,display,coord = [0.5,0.5,1.0,1.0],off
 
     ImgIndex = (np.tile(np.arange(Width+1).reshape(Width+1,1)-1,(1,ColNum))+np.tile(StartPoint,(Width+1,1)))
     [row,col] = np.shape(ImgIndex)
-    # ImgIndex = ImgIndex[round(max((coord[1])-coord[3]/2-offset[1],0)*row):round(min((coord[1])+coord[3]/2+offset[1],1)*row),:]
-    ImgIndex = ImgIndex[:,round((HalfIndexRange-(coord[2]/2+offset[0])*RawL)/row):round((HalfIndexRange+(coord[2]+2*offset[0])*RawL)/row)]
+    if ~bPreCrop:
+        ImgIndex = ImgIndex[round(max((coord[1])-coord[3]/2-offset[1],0)*row):round(min((coord[1])+coord[3]/2+offset[1],1)*row),:]
+    else:
+        ImgIndex = ImgIndex[:,round((HalfIndexRange-(coord[2]/2+offset[0])*RawL)/row):round((HalfIndexRange+(coord[2]+2*offset[0])*RawL)/row)]
     [row,col] = np.shape(ImgIndex)
     ImgIndex = ImgIndex.reshape(1,-1)
 
 
     ImgIndex = ImgIndex.astype(int)
-    Image = data[ImgIndex]
-    Image = Image.reshape(row,-1)
+    res = data[ImgIndex]
+    res = res.reshape(row,-1)
 
-    backGround = np.mean(Image[:,0:10],axis=1)
-    Image = Image - np.tile(backGround.reshape(-1,1),(1,col))
-    return Image
+    backGround = np.mean(res[:,0:10],axis=1)
+    res = res - np.tile(backGround.reshape(-1,1),(1,col))
+    return res
 # @profile
-def ImageTransRecoverySave(file_path,imgName='C:\\Users\\86133\\data\\testImage\\test',dataNum=1,widPar=0.5,passBandPar=1.0,display=False,displayImage=False,useNet = False):
+from skimage.transform import resize as skiResize
+from skimage.io import imsave as skiImsave
+def BinDataToCropImage(file_path,crop_H,full_H,imgSavePath,bPreCrop = True,bLinearNor = False,midTargetValue = 160,widPar=0.5,passBandPar=1.0,display=False,displayImage=False,useNet = False):
     print(file_path)
-    t1 = time.time()
+    lastPath = os.path.abspath(os.path.join(file_path,"..")) # 获取上级目录
+    file_name = file_path[len(lastPath)+1:-8] # 获取文件名
+    print(file_name)
+    t = time.time()
     rawData = MF.bin_data_read(file_path)
-    print('load completed !!')
-    print(time.time()-t1)
+    print('    Load time: %.2f s' % (time.time()-t))
     L = len(rawData)
+    dataNum = round(L/2000000)
+    print("     Data num: %d" % dataNum)
     for i in np.arange(dataNum):
+        t1 = time.time()
         data = rawData[round(i/dataNum*L):round((i+1)/dataNum*L)]
-        ImageMatrix = MF.image_recovery(data,widPar,passBandPar,display,coord = [0.5,0.5,0.5,1.0])
-        print('recovery completed %d' % i)
-        # print(time.time()-t1)
-        # print(np.shape(ImageMatrix))
-        ImageSize = np.shape(ImageMatrix)
-        ImageMatrix = (255*(ImageMatrix-np.min(ImageMatrix))/(np.max(ImageMatrix)-np.min(ImageMatrix))).astype(np.int32)
-        image = Image.fromarray(ImageMatrix)
-        image = image.convert('L')
-        image = image.resize((round(ImageSize[1]*0.35*5),ImageSize[0]),Image.ANTIALIAS)
-        # print(np.shape(image))
-        imageName = imgName+'_'+str(i)+'.png'
-        image.save(imageName)
-        if displayImage:
-            plt.imshow(image)
-            plt.ion()
-            plt.pause(1)
+        image = MF.image_recovery(\
+                                    data=data,\
+                                    widPar=widPar,\
+                                    passBandPar=passBandPar,\
+                                    display=display,\
+                                    coord = [0.5,0.5,0.5,1.0],\
+                                    bPreCrop = bPreCrop\
+                                        )
+        # print('%d recovery time: %.2f s' % (i,time.time()-t1))
+        [row,col] = np.shape(image)
+        image = skiResize(image,[row,round(col*0.35*2.5)])
+        image = f_imgCrop(image,crop_H,full_H,6)
+        # image = skiResize(image,[500,500])
+        minSrcValue = np.min(image)
+        maxSrcValue = np.max(image)
+        if bLinearNor:
+            image = 255*(image-minSrcValue)/(maxSrcValue-minSrcValue)
+        else:
+            image = np.where(image>0,(255-midTargetValue)*(image-0)/(maxSrcValue-0)+midTargetValue,(midTargetValue-0)*(image-minSrcValue)/(0-minSrcValue)+0)
+        image = image.astype(np.uint8)
+        imageName = imgSavePath + '\\' + file_name + '_' + str(i+1) +'.png'
+        skiImsave(imageName,image)
+        print(' Process time: %.2f s' % (time.time()-t1))
+        break
 # @profile
 def bin_data_read(file_path):
-    t1 = time.time()
     data_bin = open(file_path, 'rb+')
     data_size = os.path.getsize(file_path)
     
@@ -155,3 +170,53 @@ def bin_data_to_coord(netPATH,data):
         output = outputs.numpy()
     return output
 
+from skimage.transform import resize as skiResize
+import math
+def f_imgCrop(image,crop_H,full_H,sigma):
+    avg = np.mean(image)
+    [m,n] = np.shape(image)
+    cropRangeR = round(m/4)
+    cropRangeC = cropRangeR
+
+    extendImg = np.full((m+cropRangeR,n+cropRangeC),avg)
+    extendImg[round(cropRangeR/2):round(cropRangeR/2)+m,round(cropRangeC/2):round(cropRangeC/2)+n] = image
+    
+    smallSize = 100
+    smallImg = extendImg[0:(m+cropRangeR):round((m+cropRangeR)/smallSize),0:(n+cropRangeC):round((n+cropRangeC)/smallSize)]
+    [smallImgRow,smallImgCol] = np.shape(smallImg)
+    ImgMatrix = np.power(abs(smallImg - avg),0.25)
+    leftTopR = round(cropRangeR/m/2*smallImgRow)
+    leftTopC = round(cropRangeC/n/2*smallImgCol)
+    
+    
+
+    fK1=1.0/(2*sigma*sigma)
+    fK2=fK1/math.pi
+    iSize = leftTopR+1
+    out = np.zeros([1,iSize])
+    step = math.floor(iSize/2 + 0.5)
+    for j in np.arange(iSize):
+        x = j-step
+        out[0,j] = fK2 * math.exp(-x*x*fK1)
+    
+    model = out / np.sum(out)
+    model2 = np.dot(model.T,model)
+
+    halfRangeR = round(leftTopR/2)
+    halfRangeC = round(leftTopC/2)
+    sumMatrix = np.zeros([smallImgRow,smallImgCol])
+    for r in range(leftTopR,(smallImgRow-leftTopR+1)):
+        for c in range(leftTopC,(smallImgCol-leftTopC+1)):
+            sumMatrix[r,c] = np.sum(model2*ImgMatrix[r-halfRangeR:r+halfRangeR+1,c-halfRangeC:c+halfRangeC+1])
+        
+    [row,col] = np.unravel_index(sumMatrix.argmax(), sumMatrix.shape)
+    # row = np.mean(row)
+    # col = np.mean(col)
+    row = round(row * ((m+cropRangeR)/smallImgRow))
+    col = round(col * ((n+cropRangeC)/smallImgCol))
+    resHeight = round(m*crop_H/full_H)
+    resWidth = resHeight
+    row = max(min(row,round(m+cropRangeR/2-resHeight/2)),round(cropRangeR/2+resHeight/2))
+    col = max(min(col,round(n+cropRangeC/2-resWidth/2)),round(cropRangeC/2+resWidth/2))
+    return extendImg[round(row-resHeight/2):round(row+resHeight/2),round(col-resWidth/2):round(col+resWidth/2)]
+    
