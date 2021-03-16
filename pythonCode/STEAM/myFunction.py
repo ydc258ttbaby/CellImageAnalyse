@@ -145,7 +145,7 @@ def BinDataToCropImage(file_path,crop_H,full_H,imgSavePath,bPreCrop = True,bLine
         imageName = imgSavePath + '\\' + file_name + '_' + str(i+1) +'.png'
         skiImsave(imageName,image)
         print(' Process time: %.2f s' % (time.time()-t1))
-        break
+        # break
 # @profile
 def bin_data_read(file_path):
     data_bin = open(file_path, 'rb+')
