@@ -219,4 +219,41 @@ def f_imgCrop(image,crop_H,full_H,sigma):
     row = max(min(row,round(m+cropRangeR/2-resHeight/2)),round(cropRangeR/2+resHeight/2))
     col = max(min(col,round(n+cropRangeC/2-resWidth/2)),round(cropRangeC/2+resWidth/2))
     return extendImg[round(row-resHeight/2):round(row+resHeight/2),round(col-resWidth/2):round(col+resWidth/2)]
-    
+
+import shutil
+def f_Recover(\
+                binFilePath,\
+                moveDesPath,\
+                imgSavePath,\
+                bMove = False ,\
+                midTargetValue = 160,\
+                bLinearNor = False,\
+                crop_H = 32,\
+                full_H = 56,\
+                bPreCrop = True,\
+                ):
+
+    if os.path.exists(moveDesPath) == False:
+        os.makedirs(moveDesPath)
+    if os.path.exists(imgSavePath) == False:
+        os.makedirs(imgSavePath)
+
+    for file in os.listdir(binFilePath):
+        if file.endswith(".Wfm.bin"):
+            
+            file_path = os.path.join(binFilePath,file)
+            
+            print(file_path) 
+            MF.BinDataToCropImage(\
+                                    file_path=file_path,\
+                                    imgSavePath = imgSavePath,\
+                                    midTargetValue = midTargetValue,\
+                                    bLinearNor = bLinearNor,\
+                                    crop_H = crop_H,\
+                                    full_H = full_H,\
+                                    bPreCrop = bPreCrop,\
+                                        )
+            if bMove:
+                moveDesFile = os.path.join(moveDesPath,file)
+                shutil.move(file_path,moveDesFile)
+
