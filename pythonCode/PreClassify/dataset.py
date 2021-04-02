@@ -8,6 +8,9 @@ CSVPathName = config.taskRootDir
 dir_list = config.DatasetImgDirList
 label_list = config.DatasetLabelList
 
+if(not(os.path.exists(CSVPathName))):
+    os.mkdir(CSVPathName)
+
 def csv_writer(file_dir,train_csv_writer,test_csv_writer,verify_csv_writer,total_csv_writer,label):
     for root, dirs, files in os.walk(file_dir):
         for fileName in files:

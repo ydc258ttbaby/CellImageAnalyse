@@ -1,3 +1,5 @@
+
+
 from __future__ import print_function, division
 import os
 import torch
@@ -20,6 +22,7 @@ from YDC_DL_utility import Rescale,RandomCrop,ToTensor,grayToRGB,show_image,Cell
 
 import config
 
+
 dir_list = config.DatasetImgDirList
 CSVPathName = config.taskRootDir
 pthName = config.pthName
@@ -30,7 +33,7 @@ PATH = '%s\\%s' % (CSVPathName,pthName)
 print(PATH)
 classify_num = 2
 train_csv_file = "%s\\%s" % (CSVPathName,TrainLabelCSVFileName)
-test_csv_file = "%s\\%s" % (CSVPathName,VerifyLabelCSVFileName)
+verify_csv_file = "%s\\%s" % (CSVPathName,VerifyLabelCSVFileName)
 
 transformed_dataset_train = CellsLabelDataset(csv_file=train_csv_file,\
                                               root_dir_list=dir_list,\
@@ -40,7 +43,7 @@ transformed_dataset_train = CellsLabelDataset(csv_file=train_csv_file,\
                                                 RandomCrop(224),\
                                                 ToTensor()\
                                             ]))
-transformed_dataset_test = CellsLabelDataset(csv_file=test_csv_file,\
+transformed_dataset_test = CellsLabelDataset(csv_file=verify_csv_file,\
                                              root_dir_list=dir_list,\
                                              transform=transforms.Compose([\
                                                grayToRGB(),\

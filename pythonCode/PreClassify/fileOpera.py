@@ -3,18 +3,20 @@ import shutil
 import pandas as pd
 import csv
 import pygal
+import time
 def moveFileToChildFile(file_dir,child_dir):
     bFirst = True
     for root, dirs, files in os.walk(file_dir): 
         if(bFirst):
             bFirst = False
+            print(dirs)
             for dir in dirs:
                 print(dir)
                 shutil.move(file_dir+'\\'+ dir,file_dir + '\\%s' % child_dir)
                 newFileDir = file_dir + '\\' + dir
                 os.mkdir(newFileDir)
                 shutil.move(file_dir + '\\%s' % child_dir,newFileDir)
-# moveFileToChildFile(r"F:\tianjin\ImageData\Third\LinearNor\209116",'unclass')
+# moveFileToChildFile(r"F:\wuhan\ImageData\Seventh",'unclass')
 
 # 删除整个文件夹
 # filePath = r"E:\Tianjin\temp\wave20210311_T115207_160_49.Wfm.bin"
@@ -28,7 +30,7 @@ def moveFileToAnotherFile(file_dir,another_dir):
         for file in files:
             shutil.move(file_dir+'\\'+file,another_dir)   
 # 单个文件夹文件的移动
-moveFileToAnotherFile(r"F:\tianjin\ImageData\Sixth\210962\label_1",r"F:\tianjin\ImageData\Sixth\210962\unclass")
+# moveFileToAnotherFile(r"F:\wuhan\ImageData\Seventh\211087\label_1",r"F:\wuhan\ImageData\Seventh\211087\unclass")
 # 多个文件夹文件循环移动
 # fileList = ['210962','210965']
 # for file in fileList:
@@ -82,16 +84,17 @@ def rename(root_fir,file_name,new_name):
 #     new_name = r"bigCell"
 #     rename(root_fir,file_name,new_name)
 
-# rootList = []
-# rootrootPath = r"F:\beijing\ImageData"
-# for root,dirs,files in os.walk(rootrootPath):
-#     rootList = (dirs)
-#     break  
+
+# rootrootPath = r"E:\Tianjin"
+# rootList = os.listdir(rootrootPath)
+# rootList = ['ImgData']
+
 # indexName = rootList
+
 # seriesList = []
 # fileTotalIndex = []
 # for Name in indexName:
-#     rootPath = rootrootPath + "\\" + Name + "\\LinearNor"
+#     rootPath = rootrootPath + "\\" + Name + "\\"
 #     # rootPath = rootrootPath + "\\" + Name
 #     print(rootPath)
 #     fileIndexs = []
@@ -122,5 +125,9 @@ def rename(root_fir,file_name,new_name):
 # print(fileTotalIndex)
 # dataFrame = pd.DataFrame(seriesList,index = fileTotalIndex)
 # print(dataFrame)
-# dataFrame.to_csv('F:\\DeepLearningRes\\CellNum\\beijng.csv')
-
+# dataFrame.to_csv('F:\\DeepLearningRes\\CellNum\\tianjinSeven.csv')
+i = 0
+while(True):
+    print("training... %d"%i)
+    i += 1
+    time.sleep(5)

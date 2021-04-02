@@ -4,6 +4,17 @@ import threading
 import wx
 import time
 
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import struct
+from scipy.fftpack import fft,ifft
+import myFunction as MF
+import time
+from functools import reduce
+import shutil
+
+
 print("ydc")
 
 global GRecoveryTaskNum
@@ -27,8 +38,10 @@ class RecoveryParmas():
                     bPreCrop = True, \
                     midTargetValue = "160",\
                     cropH = "32",\
-                    fullH = "56" \
+                    fullH = "56",\
+                    bSingleRecover = True \
                 ):
+        self.bSingleRecover = bSingleRecover
         self.binFilePath = binFilePath
         self.moveDesPath = moveDesPath
         self.imgSavePath = imgSavePath
@@ -55,39 +68,299 @@ class RecoveryParmas():
         print(self.serialNumList)
         print("-----------------------------")
 
+
+from skimage.transform import resize as skiResize
+from skimage.io import imsave as skiImsave
+from skimage.transform import resize as skiResize
+import math
+class RecoverOpera():
+    def __init__(self,RecoverPara):
+        self.Para = RecoverPara
+        self.Init()
+
+    def Init(self):
+        self.progress =0
+        self.paused = False
+        self.stoped = False
+        self.pauseEvent = Event()
+        self.stopEvent = Event()
+
+
+    def run(self,bPaused,bStoped,pauseEvent,stopEvent):
+        if(self.Para.bSingleRecover):
+            listDir = os.listdir(self.Para.binFilePath)
+            for item in listDir:
+                if(item[-7:] == "Wfm.bin"):
+                    self.BinDataToCropImage(os.path.join(self.Para.binFilePath,item),\
+                                            crop_H = self.str2int(self.Para.cropH),\
+                                            full_H = self.str2int(self.Para.fullH),\
+                                            imgSavePath = os.path.join(self.Para.imgSavePath,self.Para.serialNumList[0]),\
+                                            bPreCrop = self.Para.bPreCrop,\
+                                            bLinearNor = self.Para.bLinearNor,\
+                                            midTargetValue = self.str2int(self.Para.midTargetValue)\
+                                            
+                                                )
+                    if(self.Para.bMove):
+                        if not os.path.exists(self.Para.moveDesPath):
+                                os.makedirs(self.Para.moveDesPath)
+                        shutil.move(os.path.join(self.Para.binFilePath,item),\
+                                    os.path.join(self.Para.moveDesPath,item))
+        else:
+            for serialNum in self.Para.serialNumList:
+                listDir = os.listdir(os.path.join(self.Para.binFilePath,serialNum))
+                for item in listDir:
+                    if(item[-7:] == "Wfm.bin"):
+                        self.BinDataToCropImage(\
+                                            file_path = os.path.join(self.Para.binFilePath,serialNum,item),\
+                                            crop_H = self.str2int(self.Para.cropH),\
+                                            full_H = self.str2int(self.Para.fullH),\
+                                            imgSavePath = os.path.join(self.Para.imgSavePath,serialNum),\
+                                            bPreCrop = self.Para.bPreCrop,\
+                                            bLinearNor = self.Para.bLinearNor,\
+                                            midTargetValue = self.str2int(self.Para.midTargetValue)\
+                                                )
+    def pause(self):
+        print("call pause")
+        self.paused = True
+        self.pauseEvent.clear()
+    def resume(self):
+        print("call resume")
+
+        self.paused = False
+        self.pauseEvent.set()
+    def stop(self):
+        print("call stop")
+        self.stoped = True
+
+    def GetProgress(self):
+        return progress
+
+    # 以下函数封装起来，不改动
+
+    def BinDataToCropImage(self,file_path,crop_H,full_H,imgSavePath,bPreCrop = True,bLinearNor = False,midTargetValue = 160,widPar=0.5,passBandPar=1.0,display=False,displayImage=False,useNet = False):
+        print(file_path)
+        lastPath = os.path.abspath(os.path.join(file_path,"..")) # 获取上级目录
+        file_name = file_path[len(lastPath)+1:-8] # 获取文件名
+        print(file_name)
+        t = time.time()
+        rawData = self.bin_data_read(file_path)
+        print('    Load time: %.2f s' % (time.time()-t))
+        L = len(rawData)
+        dataNum = round(L/2000000)
+        print("     Data num: %d" % dataNum)
+        for i in np.arange(dataNum):
+            if i > 10:
+                break
+            if(not(self.stopEvent.isSet())):
+                print(self.stoped)
+                print(self.paused)
+                tid = threading.get_ident()
+                print("recover opera id : %d"%tid)
+                if self.paused: # check pause
+                    print("paused ...")
+                    self.pauseEvent.wait()
+                else: # run
+                    t1 = time.time()
+                    data = rawData[round(i/dataNum*L):round((i+1)/dataNum*L)]
+                    image = self.image_recovery(\
+                                                data=data,\
+                                                widPar=widPar,\
+                                                passBandPar=passBandPar,\
+                                                display=display,\
+                                                coord = [0.5,0.5,0.5,1.0],\
+                                                bPreCrop = bPreCrop\
+                                                    )
+                    # print('%d recovery time: %.2f s' % (i,time.time()-t1))
+                    [row,col] = np.shape(image)
+                    image = skiResize(image,[row,round(col*0.35*2.5)])
+                    image = self.f_imgCrop(image,crop_H,full_H,6)
+                    # image = skiResize(image,[500,500])
+                    minSrcValue = np.min(image)
+                    maxSrcValue = np.max(image)
+                    if bLinearNor:
+                        image = 255*(image-minSrcValue)/(maxSrcValue-minSrcValue)
+                    else:
+                        image = np.where(image>0,(255-midTargetValue)*(image-0)/(maxSrcValue-0)+midTargetValue,(midTargetValue-0)*(image-minSrcValue)/(0-minSrcValue)+0)
+                    image = image.astype(np.uint8)
+                    if not os.path.exists(imgSavePath):
+                        os.makedirs(imgSavePath)
+
+                    imageName = imgSavePath + '\\' + file_name + '_' + str(i+1) +'.png'
+                    skiImsave(imageName,image)
+                    print(' Process time: %.2f s' % (time.time()-t1))
+
+    def bin_data_read(self,file_path):
+        tid = threading.get_ident()
+        print("load thread id : %d"%tid)
+        data_bin = open(file_path, 'rb+')
+        data_size = os.path.getsize(file_path)
+        
+        data_total = data_bin.read(data_size)
+
+        data_tuple = struct.unpack(str(int(data_size/4))+'f', data_total)
+        # print(len(data_tuple))
+        return data_tuple
+    def str2int(self,s):
+        return reduce(lambda x,y:x*10+y, map(lambda s:{'0':0, '1':1, '2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9}[s], s))
+
+    def image_recovery(self,data,widPar,passBandPar,display,bPreCrop = False,coord = [0.5,0.5,1.0,1.0],offset = [0.0,0.0]):
+        if display:
+            MF.plot_1D_single(data[:3000])
+        if bPreCrop:
+            RawL = len(data)
+            HalfIndexRange = pow(2,len(bin(round((coord[2]+2*offset[0])*RawL-1)))-3)
+            data = data[round(coord[0]*RawL)-HalfIndexRange:round(coord[0]*RawL)+HalfIndexRange]
+        L = len(data)
+        # print(L)
+        data = data - np.mean(data)
+        data_f = (fft(data))
+
+        if display: 
+            MF.plot_1D_single(abs(data_f[:10000]))
+        RepRate = np.argmax(abs(data_f[100:4500]))+100
+        # print('RepRate: %d'%RepRate)
+        Width = round(widPar*L/RepRate)*2
+        PassBand = round(passBandPar*RepRate)
+        filter =  np.hstack([0,np.ones(PassBand),np.zeros(L-1-2*PassBand),np.ones(PassBand)])
+        FilterData = np.real(ifft(data_f*filter))
+        if display:
+            MF.plot_1D_single(FilterData[:3000])
+
+        SubData = FilterData[:4*Width]
+        diffData = np.diff(np.sign(np.diff(SubData)))
+        Locs = np.where(diffData==-2)[0]
+
+        if Locs[0]-Width/2 > 0:
+            FirstPulsePos = Locs[0]-Width/2
+        else:
+            FirstPulsePos = Locs[1]-Width/2
+        FirstPulsePos = int(FirstPulsePos)
+        FirstPulse = data[FirstPulsePos:FirstPulsePos+Width]
+        # if display:
+        #     MF.plot_1D_single(FirstPulse)
+
+        CrossCor = np.zeros((Width,),dtype = float)
+        partdata = data[L - 2*Width:]
+        for i in np.arange(Width):
+            cc = np.sum(FirstPulse*partdata[i:Width + i])
+            CrossCor[i] = cc
+        LastPulsePos = np.argmax(CrossCor)+L-2*Width+1
+
+
+        FilterData = FilterData[FirstPulsePos:LastPulsePos]
+
+        ColNum = 1
+        diffData = np.diff(np.sign(np.diff(FilterData)))
+
+        ColIndex = np.where(diffData==-2)[0]
+        ColNum = len(ColIndex)+1
+
+        Duration = (LastPulsePos-FirstPulsePos)/(ColNum-1)
+        StartPoint = np.round(np.arange(ColNum)*Duration)+FirstPulsePos
+
+        ImgIndex = (np.tile(np.arange(Width+1).reshape(Width+1,1)-1,(1,ColNum))+np.tile(StartPoint,(Width+1,1)))
+        [row,col] = np.shape(ImgIndex)
+        if ~bPreCrop:
+            ImgIndex = ImgIndex[round(max((coord[1])-coord[3]/2-offset[1],0)*row):round(min((coord[1])+coord[3]/2+offset[1],1)*row),:]
+        else:
+            ImgIndex = ImgIndex[:,round((HalfIndexRange-(coord[2]/2+offset[0])*RawL)/row):round((HalfIndexRange+(coord[2]+2*offset[0])*RawL)/row)]
+        [row,col] = np.shape(ImgIndex)
+        ImgIndex = ImgIndex.reshape(1,-1)
+
+
+        ImgIndex = ImgIndex.astype(int)
+        res = data[ImgIndex]
+        res = res.reshape(row,-1)
+
+        backGround = np.mean(res[:,0:10],axis=1)
+        res = res - np.tile(backGround.reshape(-1,1),(1,col))
+        return res
+
+    def f_imgCrop(self,image,crop_H,full_H,sigma):
+        avg = np.mean(image)
+        [m,n] = np.shape(image)
+        cropRangeR = round(m/4)
+        cropRangeC = cropRangeR
+
+        extendImg = np.full((m+cropRangeR,n+cropRangeC),avg)
+        extendImg[round(cropRangeR/2):round(cropRangeR/2)+m,round(cropRangeC/2):round(cropRangeC/2)+n] = image
+        
+        smallSize = 100
+        smallImg = extendImg[0:(m+cropRangeR):round((m+cropRangeR)/smallSize),0:(n+cropRangeC):round((n+cropRangeC)/smallSize)]
+        [smallImgRow,smallImgCol] = np.shape(smallImg)
+        ImgMatrix = np.power(abs(smallImg - avg),0.25)
+        leftTopR = round(cropRangeR/m/2*smallImgRow)
+        leftTopC = round(cropRangeC/n/2*smallImgCol)
+        
+        
+
+        fK1=1.0/(2*sigma*sigma)
+        fK2=fK1/math.pi
+        iSize = leftTopR+1
+        out = np.zeros([1,iSize])
+        step = math.floor(iSize/2 + 0.5)
+        for j in np.arange(iSize):
+            x = j-step
+            out[0,j] = fK2 * math.exp(-x*x*fK1)
+        
+        model = out / np.sum(out)
+        model2 = np.dot(model.T,model)
+
+        halfRangeR = round(leftTopR/2)
+        halfRangeC = round(leftTopC/2)
+        sumMatrix = np.zeros([smallImgRow,smallImgCol])
+        for r in range(leftTopR,(smallImgRow-leftTopR+1)):
+            for c in range(leftTopC,(smallImgCol-leftTopC+1)):
+                sumMatrix[r,c] = np.sum(model2*ImgMatrix[r-halfRangeR:r+halfRangeR+1,c-halfRangeC:c+halfRangeC+1])
+            
+        [row,col] = np.unravel_index(sumMatrix.argmax(), sumMatrix.shape)
+        # row = np.mean(row)
+        # col = np.mean(col)
+        row = round(row * ((m+cropRangeR)/smallImgRow))
+        col = round(col * ((n+cropRangeC)/smallImgCol))
+        resHeight = round(m*crop_H/full_H)
+        resWidth = resHeight
+        row = max(min(row,round(m+cropRangeR/2-resHeight/2)),round(cropRangeR/2+resHeight/2))
+        col = max(min(col,round(n+cropRangeC/2-resWidth/2)),round(cropRangeC/2+resWidth/2))
+        return extendImg[round(row-resHeight/2):round(row+resHeight/2),round(col-resWidth/2):round(col+resWidth/2)]
+
+
 class RecoverThread(Thread):
     def __init__(self,NewRecoverPara,name):
         super(RecoverThread,self).__init__()
         self.paused = False
-        self.end = False
+        self.stoped = False
         self.pauseEvent = Event()
         self.stopEvent = Event()
         self.daemon = True
         self.name = name
         self.NewRecoverPara = NewRecoverPara
         self.count = 0
+        self.RecoverInstance = RecoverOpera(NewRecoverPara)
+        
+        tid = threading.get_ident()
+        print("recover thread id : %d"%tid)
     def run(self):
         # self.resume()
-        while(not(self.stopEvent.isSet())):
-            time.sleep(0.5)
-            if self.paused:
-                print("paused ...")
-                self.pauseEvent.wait()
-            else:
-                print(self.name)  
-                self.count += 5
+        
+        self.RecoverInstance.run(self.paused,self.stoped,self.pauseEvent,self.stopEvent)
+        
         print("end run")
                 
     def pause(self):
-        self.paused = True
-        self.pauseEvent.clear()
+        self.RecoverInstance.pause()
+
     def resume(self):
-        self.paused = False
-        self.pauseEvent.set()
-    def stop(self):
-        self.stopEvent.set()
+        self.RecoverInstance.resume()
+        
+    def stop(self):        
+        self.RecoverInstance.stop()
+
+
     def GetProcess(self):
         return self.count
+    def GetParas(self):
+        return self.NewRecoverPara
 
 
 class RecoverInfoDislog(wx.Dialog):
@@ -102,7 +375,7 @@ class RecoverInfoDislog(wx.Dialog):
         # self.SetSize((400, 300))
         self.Centre()
 
-    def GetParmas(self):
+    def GetParas(self):
         return self.rParmas
 
     def CreatePanel(self):
@@ -193,6 +466,8 @@ class RecoverInfoDislog(wx.Dialog):
         self.bLinearNor_CB.SetValue(False)
         self.bPreCrop_CB = wx.CheckBox(setting_Panel,pos = (170,63),label = "是否预裁剪")
         self.bPreCrop_CB.SetValue(True)
+        self.bSingleRecover_CB = wx.CheckBox(setting_Panel,pos = (170,93),label = "是否单一样本恢复")
+        self.bSingleRecover_CB.SetValue(True)
 
         midTargetValue_ST.SetFont(font2)
         cropH_ST.SetFont(font2)
@@ -203,6 +478,7 @@ class RecoverInfoDislog(wx.Dialog):
         self.bMoved_CB.SetFont(font2)
         self.bLinearNor_CB.SetFont(font2)
         self.bPreCrop_CB.SetFont(font2)
+        self.bSingleRecover_CB.SetFont(font2)
 
 
         vbox.Add(setting_Panel,0,wx.EXPAND |wx.LEFT|wx.RIGHT, 15)
@@ -263,6 +539,7 @@ class RecoverInfoDislog(wx.Dialog):
             self.rParmas.bMove = self.bMoved_CB.GetValue()
             self.rParmas.bLinearNor = self.bLinearNor_CB.GetValue()
             self.rParmas.bPreCrop = self.bPreCrop_CB.GetValue()
+            self.rParmas.bSingleRecover = self.bSingleRecover_CB.GetValue()
             
         self.Destroy()
         
@@ -290,6 +567,9 @@ class RecoveryPanel(wx.Panel):
         self.Init()
         self.CreatePanel()
         self.CreateTimer()
+        tid = threading.get_ident()
+        print("recover panel id : %d"%tid)
+        
         
     def Init(self):
 
@@ -324,6 +604,9 @@ class RecoveryPanel(wx.Panel):
         self.CollectIconFocus = IconAsset("collectFocus").Get()
         self.AnalyzeIconFocus = IconAsset("analyzeFocus").Get()
 
+        self.moreInfoFrame = RecoveryFrame(None,NewRecoverPara = self.Para,task = self.task)
+
+
     def CreateTimer(self):
         self.timer = wx.Timer(self,1)
         self.Bind(wx.EVT_TIMER,self.OnTimer,self.timer)
@@ -334,7 +617,7 @@ class RecoveryPanel(wx.Panel):
         self.TaskProcess = self.task.GetProcess()
         self.gauge.SetValue(self.TaskProcess)
 
-        print("timer: %d"%self.TaskProcess)
+        # print("timer: %d"%self.TaskProcess)
 
     def CreatePanel(self):
         self.SetBackgroundColour(self.FColor)
@@ -397,17 +680,18 @@ class RecoveryPanel(wx.Panel):
 
     def ShowMoreInfo(self,e):
         print("new Frame")
-        moreInfoFrame = RecoveryFrame(None,self.Para)
-        moreInfoFrame.Show()
+        self.moreInfoFrame.Show()
     
         
     def CancelTask(self,e):
         global GRecoveryTaskNum
         GRecoveryTaskNum -= 1
         self.task.stop()
+        self.timer.Stop()
+        if(self.moreInfoFrame):
+            self.moreInfoFrame.Destroy()
         self.Destroy()
         self.vbox.Layout()
-        self.timer.Stop()
         
     def SwitchRunPause(self,e):
         if(self.bUnBegin):
@@ -437,14 +721,16 @@ class RecoveryPanel(wx.Panel):
                     self.bRunning = True
 
 class RecoveryFrame(wx.Frame):
-    def __init__(self,parent,NewRecoverPara):
+    def __init__(self,parent,NewRecoverPara,task):
         super(RecoveryFrame,self).__init__(parent)
+        self.task = task
         self.NewRecoverPara = NewRecoverPara
         self.Init()
         self.CreatePanel()
         # font1 = wx.Font(17, family = wx.MODERN,style = wx.NORMAL,weight = wx.NORMAL,underline = False,faceName = '微软雅黑 Light')
         # self.SetFont(font1)
-    
+        tid = threading.get_ident()
+        print("recover Frame id : %d"%tid)
     def Init(self):
         self.SetSize((800, 600))
         # self.SetTitle('Simple menu')
@@ -512,7 +798,7 @@ class RecoveryFrame(wx.Frame):
 
 
         setting_Panel = wx.Panel(leftInfoPanel)
-        setting_SB = wx.StaticBox(setting_Panel,size = (300,130),label = "其他设置")
+        setting_SB = wx.StaticBox(setting_Panel,size = (300,190),label = "其他设置")
 
         setting_SB.SetFont(font2)
         setting_SB.SetForegroundColour((100,100,100))
@@ -531,6 +817,13 @@ class RecoveryFrame(wx.Frame):
         bLinearNor_CB.SetValue(self.NewRecoverPara.bLinearNor)
         bPreCrop_CB = wx.CheckBox(setting_Panel,pos = (170,93),label = "是否预裁剪")
         bPreCrop_CB.SetValue(self.NewRecoverPara.bPreCrop)
+        bSingleRecover_CB = wx.CheckBox(setting_Panel,pos = (170,123),label = "是否单一样本恢复")
+        bSingleRecover_CB.SetValue(self.NewRecoverPara.bSingleRecover)
+
+        
+        bShowImage_CB = wx.CheckBox(setting_Panel,pos = (170,153),label = "是否预览图像")
+        bShowImage_CB.SetValue(True)
+
 
         midTargetValue_ST.SetFont(font2)
         cropH_ST.SetFont(font2)
@@ -541,12 +834,47 @@ class RecoveryFrame(wx.Frame):
         bMoved_CB.SetFont(font2)
         bLinearNor_CB.SetFont(font2)
         bPreCrop_CB.SetFont(font2)
+        bShowImage_CB.SetFont(font2)
+        bSingleRecover_CB.SetFont(font2)
 
         leftInfoVbox.Add(setting_Panel,flag = wx.LEFT|wx.EXPAND|wx.TOP,border = 10)
 
         hbox.Add(leftInfoPanel,proportion = 0,flag = wx.EXPAND|wx.ALL,border = 5)
+
+        rightImgPanel = wx.Panel(panel)
+        rightBagSizer = wx.GridBagSizer(3,3)
+
         
+        self.UpateImgPathList()
+
+        index = 0
+        for item in self.ImgPathList:
+            img = wx.Image(item, wx.BITMAP_TYPE_ANY)
+            img = img.Scale(160,160)
+            temp = wx.StaticBitmap(rightImgPanel, wx.ID_ANY,wx.BitmapFromImage(img))
+            xPos = 180*(index//3)
+            yPos = 180*(index%3)
+            print("x: %d y: %d index: %d" %(xPos,yPos,index))
+            temp.SetPosition((xPos,yPos))
+            index += 1
+
+        hbox.Add(rightImgPanel,proportion = 0,flag = wx.EXPAND|wx.ALL,border = 20)
         panel.SetSizer(hbox)
+        hbox.Fit(self)
+    def UpateImgPathList(self):
+        ImgRootPath = self.NewRecoverPara.imgSavePath
+
+        self.ImgPathList = [r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210224_T140059_50_1.Wfm.bin_2000002_5397.png_wave20210224_T140059_50_1.Wfm.bin_2000002_5397.png_wave20210224_T140059_50_1.Wfm.bin_2000002_5397.png_wave20210224_T140059_50_1.Wfm.bin_2000002_5397.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T102448_160_1.Wfm.bin_2000002_7251.png_wave20210303_T102448_160_1.Wfm.bin_2000002_7251.png_wave20210303_T102448_160_1.Wfm.bin_2000002_7251.png_wave20210303_T102448_160_1.Wfm.bin_2000002_7251.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T134716_160_1.Wfm.bin_2000002_2890.png_wave20210303_T134716_160_1.Wfm.bin_2000002_2890.png_wave20210303_T134716_160_1.Wfm.bin_2000002_2890.png_wave20210303_T134716_160_1.Wfm.bin_2000002_2890.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T134842_160_1.Wfm.bin_2000002_3181.png_wave20210303_T134842_160_1.Wfm.bin_2000002_3181.png_wave20210303_T134842_160_1.Wfm.bin_2000002_3181.png_wave20210303_T134842_160_1.Wfm.bin_2000002_3181.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T135611_160_2.Wfm.bin_2000002_3203.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3203.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3203.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3203.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T135611_160_2.Wfm.bin_2000002_3214.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3214.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3214.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3214.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T135611_160_2.Wfm.bin_2000002_3215.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3215.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3215.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3215.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T135611_160_2.Wfm.bin_2000002_3223.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3223.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3223.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3223.png",\
+                            r"F:\tianjin\ImageData\Sixth\210694\bigcell\wave20210303_T135611_160_2.Wfm.bin_2000002_3227.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3227.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3227.png_wave20210303_T135611_160_2.Wfm.bin_2000002_3227.png",\
+                            ]
+
 
 class MyFrame(wx.Frame):
     def __init__(self,parent,title):
@@ -555,6 +883,8 @@ class MyFrame(wx.Frame):
         self.SetWindowsInfo()
         self.CreateMenuBar()
         self.CreatePanel()
+        tid = threading.get_ident()
+        print("My Frame id : %d"%tid)
         # self.SetBackgroundStyle(wx.BG_STYLE_PAINT)
     def Init(self):
         self.SetOwnBackgroundColour("#ff8888")
@@ -629,6 +959,9 @@ class MyFrame(wx.Frame):
         print("print: GRecoveryTaskNum: %d" %GRecoveryTaskNum)
         self.TaskVbox.Layout()
 
+        thcount = threading.active_count()
+        print("thread Num: %d" %thcount )
+
     def CreateMenuBar(self):
         # fileMenu
         fileMenu = wx.Menu()
@@ -669,9 +1002,9 @@ class MyFrame(wx.Frame):
         if(e.GetId() == ID_newRecover_B):
             dislog = RecoverInfoDislog(None)
             dislog.ShowModal()
-            NewRecoverPara = dislog.GetParmas()
-            if True or NewRecoverPara.bValid:
-                self.RecoverParasList.append(dislog.GetParmas())
+            NewRecoverPara = dislog.GetParas()
+            if NewRecoverPara.bValid:
+                self.RecoverParasList.append(dislog.GetParas())
                 NewRecoverPara.print()
                 print("Paras Len: %d" % len(self.RecoverParasList))
                 
@@ -703,5 +1036,11 @@ def  main():
 if __name__ == '__main__':
     
     main()
+    # para = RecoveryParmas()
+    # para.serialNumList = ["12321"]
+    # para.binFilePath = r"E:\Tianjin\temp\temp"
+    # recover = RecoverOpera(para)
+    # recover.Init()
+    # recover.run()
 
 

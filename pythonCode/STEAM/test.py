@@ -1,61 +1,111 @@
-import myFunction as MF
-import time
-import numpy as np
-import matplotlib.pyplot as plt
-import numpy as np
+from threading import Thread,Event,Condition
+import threading
 import os
-import struct
-from scipy.fftpack import fft,ifft
-import myFunction as MF
-from PIL import Image
-import time
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from myClass import Net,Net2
-from skimage.io import imshow as skiImshow
-t = time.time()
-file_path = r"F:\tianjin\RawData\Seventh\211116\wave20210310_T135028_160_1.Wfm.bin"
-MF.BinDataToCropImage(
-                            file_path = file_path,\
-                            imgSavePath = r"E:\test",\
-                            midTargetValue = 160,\
-                            bLinearNor = False,\
-                            crop_H = 32,\
-                            full_H = 56,\
-                            bPreCrop = True,\
-                            # widPar=1.0,\
-                            # passBandPar=0.5\
-                            )
-print("   Total time: %.2f s" % (time.time()-t))
+import struct,time
+import wx
+from concurrent.futures import ThreadPoolExecutor
+def bin_data_read(file_path):
+        t = time.time()
+        tid = threading.get_ident()
+        print("load thread id : %d"%tid)
+        data_bin = open(file_path, 'rb+')
+        data_size = os.path.getsize(file_path)
+        
+        data_total = data_bin.read(data_size)
+
+        data_tuple = struct.unpack(str(int(data_size/4))+'f', data_total)
+        # print(len(data_tuple))
+        print("load time %.3f" %(time.time()-t))
+        return data_tuple
+class bThread(Thread):
+    def __init__(self,name):
+        super(bThread,self).__init__()
+        self.daemon = True
+        self.name = name
+        
+        tid = threading.get_ident()
+        print("b thread id : %d"%tid)
+
+    def run(self):
+        file2 = r"E:\Tianjin\data\123\temp\100001.bin"
+        file1 = r"E:\Tianjin\data\123\wave20210316_T103657_160_1.Wfm.bin"
+        file3 = r"G:\天津\原始数据\第二次原始数据\208\50\wave20201123_T112443_50_1.Wfm.bin"
+        task1 = RecoverThread("1",file3)
+        task1.setDaemon(True)
+        task1.start()
+
+def concurrent_test():  #异步进程
+   with ThreadPoolExecutor(max_workers=100) as e:
+        file2 = r"E:\Tianjin\data\123\temp\100001.bin"
+        file1 = r"E:\Tianjin\data\123\wave20210316_T103657_160_1.Wfm.bin"
+        file3 = r"G:\天津\原始数据\第二次原始数据\208\50\wave20201123_T112443_50_1.Wfm.bin"
+        e.submit(bin_data_read,file3)
+        # data = bin_data_read(file3)
+        # print(len(data))
+
+class RecoverThread(Thread):
+    def __init__(self,name,filePath):
+        super(RecoverThread,self).__init__()
+        self.filePath = filePath
+        self.pauseEvent = Event()
+        self.stopEvent = Event()
+        self.daemon = True
+        self.name = name
+        
+        tid = threading.get_ident()
+        print("recover thread id : %d"%tid)
+
+    def run(self):
+        # time.sleep(10)
+        # print("end time")
+        
+        data = bin_data_read(self.filePath)
+        print(len(data))
+        print("%s end run"% self.name)
+        while(True):
+            time.sleep(0.5)
+            print(self.name)
+
+class MyFrame(wx.Frame):
+    def __init__(self,parent,title):
+        super(MyFrame,self).__init__(parent,title=title)
+        panel = wx.Panel(self)
+        btn = wx.Button(panel,size=(90,30),pos = (50,50))
+        btn.SetLabel("button")
+        btn.Bind(wx.EVT_BUTTON,self.Onload)
+        btn2 = wx.Button(panel,size=(90,30),pos = (150,50))
+        btn2.SetLabel("print")
+        btn2.Bind(wx.EVT_BUTTON,self.print)
+
+    def print(self,e):
+        print("ydc %d" % threading.active_count ())
+    def Onload(self,e):
+        print("OnLoad")
+        concurrent_test()
+
+def  main():
+    
+    app = wx.App()
+    ex = MyFrame(None, title='Vision Speed')
+    # ex= RecoveryFrame(None,RecoveryParmas())
+
+    ex.Show()
+    app.MainLoop()
 
 
-# a= np.array([range(1,10)])
-# b = a
-# c = np.dot(a.T,b)
-# print(c)
 
-# d = c[1:10:2,1:5]
-# print(d)
+if __name__ == '__main__':
+    main()
+    # file2 = r"E:\Tianjin\data\123\temp\100001.bin"
+    # file1 = r"E:\Tianjin\data\123\wave20210316_T103657_160_1.Wfm.bin"
+    # task1 = RecoverThread("1",file1)
+    # task1.setDaemon(True)
+    # task1.start()
+    # task2 = RecoverThread("2",file2)
+    # task2.setDaemon(True)
+    # task2.start()
 
-# def f(a):
-#     a = a + 1
-# a = np.arange([10,10])
-# print(a)
-# # print(np.where(a>5 and a < 9))
-# b = np.where(a>5,(255-160)*(a-5)/(10-5)+160,(160-0)*(a-0)/(5-0)+0)
-# print(b)
-
-# b = np.where(a>5,a+1,a-1)
-# print(b)
-
-# imgPath = r"E:\test\Image_20.png"
-# image = Image.open(imgPath)
-# # image.show()
-# imageNp = np.array(image)
-# print(np.max(imageNp))
-# print(np.shape(imageNp))
-# cropImg = MF.f_imgCrop(imageNp,32,56,6)
-# skiImshow(cropImg)
-# plt.show()
-
+    
+    # while(True):
+    #     time.sleep(1)
+    #     print("loop")
